@@ -69,7 +69,7 @@ def backtest2(initial_value, strategy, start, end, train_window, maxPoints):
 
     for i in range(0, len(df)):
         data = df[i: i + 1]
-        last_day_totoal_value = account[i][4]
+        last_day_total_value = account[i][4]
         last_day_cash = account[i][5]
         last_day_ivv_shares = account[i][6]
 
@@ -107,13 +107,12 @@ def backtest2(initial_value, strategy, start, end, train_window, maxPoints):
                 limit_order_status = 'Cancelled'
             cash_for_actn_shares2 = - close_1d *actn_shares2
 
-
         actn_shares = actn_shares1 + actn_shares2
         cash = last_day_cash + cash_for_actn_shares1 + cash_for_actn_shares2
         ivv_shares = last_day_ivv_shares + actn_shares
         ivv_value = ivv_shares * close
         total_value = cash + ivv_value
-        daily_return = total_value / last_day_totoal_value - 1
+        daily_return = total_value / last_day_total_value - 1
         acc_return = total_value / initial_value - 1
 
         ivv_daily_return = close / close_1d - 1
@@ -124,13 +123,14 @@ def backtest2(initial_value, strategy, start, end, train_window, maxPoints):
                         daily_return, acc_return, ivv_daily_return, ivv_acc_return]
         account.append(account_data)
     account = pd.DataFrame(account,
-                           columns=['date', 'close_1d', 'open', 'close', 'totoal_value', 'cash',
+                           columns=['date', 'close_1d', 'open', 'close', 'total_value', 'cash',
                                     'ivv_shares', 'ivv_value', 'actn',
                                     'market_order_shares', 'limit_order_shares', 'limit_order_status',
                                     'daily_return', 'acc_return', 'ivv_daily_return', 'ivv_acc_return'])
     account.to_csv('backtest_results.csv')
     trade_blotter = to_trade_blotter(account)
-    return account, trade_blotter
+    calender_ledger = to_calender_ledger(account)
+    return account, trade_blotter, calender_ledger
 
 def to_trade_blotter(backtest_results):
     backtest_results['actn'] = backtest_results['actn'].apply(lambda x: 'BUY' if x == 1 else 'SELL')
@@ -160,3 +160,7 @@ def to_trade_blotter(backtest_results):
     trade_blotter['Filled Price'] = trade_blotter.apply(
         lambda x: x['Order Price'] if x['Filled / Cancelled'] == 'Filled' else None, axis=1)
     return trade_blotter
+
+def to_calender_ledger(backtest_results):
+    calender_ledger = backtest_results[['date', 'close', 'cash', 'ivv_value', 'total_value']]
+    return calender_ledger

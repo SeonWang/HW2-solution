@@ -105,7 +105,7 @@ def logistic_strategy(df, start, train_window):
         if day.__ge__(start):
             break
     end = df.index[len(df.index) - 1]
-    df = df.loc[real_start_index : end, :]
+    df = df.loc[real_start_index:, :]
 
     df.to_csv('logistic_results.csv')
 
