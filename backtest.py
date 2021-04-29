@@ -2,6 +2,8 @@ from datetime import *
 from strategy import *
 import pandas as pd
 from strategyData import *
+from statistics import *
+import time
 
 def shares_to_buy(last_day_cash, price):
     if last_day_cash // price < 100:
@@ -19,50 +21,74 @@ def backtest1(model_data,test):
     Result = loaded_model.predict(test_data.loc[:, test_data.columns != 'Response'])
     amt = 0
     ror = []
-    df = pd.DataFrame()
-    df['Date'] = test_data.index[1:]
-    df['ID'] = test_data['Close'][1:]
-    df['Type'] = test_data['Close'][1:]
-    df['actn'] = test_data['Close'][1:]
-    df['Price'] = test_data['Close'][1:]
-    df['size'] = test_data['Close'][1:]
-    df['symb'] = test_data['Close'][1:]
+    blotter = pd.DataFrame()
+    ledger = pd.DataFrame()
+    blotter['Date'] = test_data.index[:]
+    blotter['ID'] = test_data['Close'][:]
+    blotter['Type'] = test_data['Close'][:]
+    blotter['actn'] = test_data['Close'][:]
+    blotter['Price'] = test_data['Close'][:]
+    blotter['size'] = test_data['Close'][:]
+    blotter['symb'] = test_data['Close'][:]
+    ledger['Date'] = test_data.index[:]
+    ledger['position'] = test_data['Close'][:]
+    ledger['Cash'] = test_data['Close'][:]
+    ledger['Stock Value'] = test_data['Close'][:]
+    ledger['Total Value'] = test_data['Close'][:]
+    ledger['Revenue'] = test_data['Close'][:]
+    ledger['IVV Yield'] = test_data['IVV'][:]
+    ledger['position'][0] = 0
+    ledger['Cash'][0] = 1000000
+    ledger['Total Value'][0] = 1000000
+    ledger['Stock Value'][0] = 1000000
+    ledger['Revenue'][0] = 0
+    ledger['IVV Yield'][0] = test_data['IVV'][0]
     count = 1
-    last = 0.0
-    cost = 0
+    last = 1000000
+    gmrr = 1
     revenue = 0.0
     for i in range(1, 31):
-        df['ID'][i-1] = count
+        blotter['ID'][i-1] = count
+        ledger['IVV Yield'][i] = test_data['IVV'][i]
         if Result[i - 1] > 0.5:
-            df['Type'][i-1] = 'MKT'
-            df['actn'][i-1] = 'BUY'
-            df['symb'][i-1] = 'IVV'
-            df['size'][i-1] = 100
-            df['Price'][i-1] = test_data['Open'][i].round(2)
-            amt = amt + 1
-            cost = cost + 100*test_data['Open'][i]
-            revenue = revenue + amt * 100 * test_data['Close'][i] / cost - 1
-            ror.append(revenue.round(4))
-            last = revenue
-            revenue = 0.0
+            blotter['Type'][i-1] = 'MKT'
+            blotter['actn'][i-1] = 'BUY'
+            blotter['symb'][i-1] = 'IVV'
+            blotter['size'][i-1] = 200
+            blotter['Price'][i-1] = test_data['Open'][i].round(2)
+            ledger['position'][i] = ledger['position'][i-1] + 200
+            ledger['Stock Value'][i] = test_data['Close'][i]*ledger['position'][i]
+            ledger['Cash'][i] = ledger['Cash'][i-1] - test_data['Open'][i]*200
+            ledger['Total Value'][i] = ledger['Stock Value'][i]+ledger['Cash'][i]
+            ledger['Revenue'][i] = ledger['Total Value'][i]/ledger['Total Value'][i-1]-1
+            gmrr = gmrr *(1+ledger['Revenue'][i])
         else:
-            df['Type'][i-1] = 'LMT'
-            df['actn'][i-1] = 'SELL'
-            df['symb'][i-1] = 'IVV'
-            df['size'][i-1] = amt*100
-            df['Price'][i-1] = test_data['Close'][i-1].round(2)
-            ror.append(round(last,4))
-            amt = 0
-            revenue = last
-            cost = 0.0
+            blotter['Type'][i-1] = 'LMT'
+            blotter['actn'][i-1] = 'SELL'
+            blotter['symb'][i-1] = 'IVV'
+            blotter['size'][i-1] = ledger['position'][i-1]
+            blotter['Price'][i-1] = test_data['Close'][i-1].round(2)
+            ledger['position'][i] = 0
+            ledger['Stock Value'][i] = 0
+            ledger['Cash'][i] = ledger['Cash'][i-1] + test_data['Close'][i-1]*ledger['position'][i-1]
+            ledger['Total Value'][i] = ledger['Stock Value'][i]+ledger['Cash'][i]
+            ledger['Revenue'][i] = ledger['Total Value'][i]/ledger['Total Value'][i-1]-1
+            gmrr = gmrr *(1+revenue)
         count = count +1
-    # test['Response'] =  loaded_model.predict(test.loc[:, test.columns != 'Response'])
-    # test_data[:]['actn'] = 'BUY'
-    df["Rate of Return(%)"] = ror
-    return df, test
+#     test['Response'] =  loaded_model.predict(test.loc[:, test.columns != 'Response'])
+    test_data[:]['actn'] = 'BUY'
+    vol = np.std(ledger['Revenue'])
+    gmrr = pow(gmrr,1/30)-1
+    sharp = (gmrr-0.0007)/vol
+    return blotter[:-1], ledger, test, sharp
 
-def backtest2(initial_value, strategy, start, end, train_window, maxPoints):
+def backtest2(initial_value, strategy, start, end, risk_free, train_window, maxPoints):
     hist_data = req_hisdata(start, end, train_window, maxPoints)
+
+    # if run out of bbg limits, use the histdata
+    # hist_data = pd.read_csv('histdata.csv', index_col=0)
+
+    hist_data.index = pd.to_datetime(hist_data.index, format='%Y-%m-%d')
     df = strategy(hist_data, start, train_window)
     initial_open = df['OPEN'].iloc[0]
     account = [[(df.index[0] + timedelta(days=-1)).strftime('%Y-%m-%d'), 0, 0, 0, initial_value, initial_value, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]]
@@ -128,9 +154,12 @@ def backtest2(initial_value, strategy, start, end, train_window, maxPoints):
                                     'market_order_shares', 'limit_order_shares', 'limit_order_status',
                                     'daily_return', 'acc_return', 'ivv_daily_return', 'ivv_acc_return'])
     account.to_csv('backtest_results.csv')
+
     trade_blotter = to_trade_blotter(account)
     calender_ledger = to_calender_ledger(account)
-    return account, trade_blotter, calender_ledger
+    daily_return = to_daily_return(account)
+    monthly_return, monthly_expected_return, monthly_volatility, monthly_sharpe_ratio = to_monthly_return(account, risk_free)
+    return account, trade_blotter, calender_ledger, daily_return, monthly_return,monthly_expected_return, monthly_volatility, monthly_sharpe_ratio
 
 def to_trade_blotter(backtest_results):
     backtest_results['actn'] = backtest_results['actn'].apply(lambda x: 'BUY' if x == 1 else 'SELL')
@@ -164,3 +193,38 @@ def to_trade_blotter(backtest_results):
 def to_calender_ledger(backtest_results):
     calender_ledger = backtest_results[['date', 'close', 'cash', 'ivv_value', 'total_value']]
     return calender_ledger
+
+def to_daily_return(backtest_results):
+    daily_return = backtest_results[['date', 'daily_return', 'acc_return', 'ivv_daily_return', 'ivv_acc_return']]
+    return daily_return
+
+def to_monthly_return(backtest_results, risk_free):
+    monthly_return = backtest_results[['date', 'total_value', 'close']]
+    initial_value = monthly_return.iloc[0, 1]
+    initial_close = monthly_return.iloc[1, 2]
+
+    monthly_return['date2'] = pd.to_datetime(monthly_return['date'], format='%Y-%m-%d')
+    monthly_return = monthly_return.groupby(pd.Grouper(key='date2', freq='m')).last()
+    monthly_return.columns = ['mon_date', 'mon_total_value', 'mon_close']
+    first_month_value = monthly_return.iloc[0, 1]
+    first_month_close = monthly_return.iloc[0, 2]
+    first_month_return = first_month_value / initial_value - 1
+    first_month_ivv_return = first_month_close / initial_close - 1
+
+    monthly_return['value_delta'] = monthly_return['mon_total_value'].diff()
+    monthly_return['value_previous'] = monthly_return['mon_total_value'].shift(periods=1)
+    monthly_return['close_delta'] = monthly_return['mon_close'].diff()
+    monthly_return['close_previous'] = monthly_return['mon_close'].shift(periods=1)
+    monthly_return['strategy_return'] = monthly_return['value_delta'] / monthly_return['value_previous']
+    monthly_return['ivv_return'] = monthly_return['close_delta'] / monthly_return['close_previous']
+    monthly_return.iloc[0, 7] = first_month_return
+    monthly_return.iloc[0, 8] = first_month_ivv_return
+
+    monthly_expected_return = monthly_return['strategy_return'].mean()
+    monthly_volatility = monthly_return['strategy_return'].std()
+    monthly_sharpe_ratio = (monthly_expected_return - risk_free / 100) / monthly_volatility
+    monthly_expected_return_str = str(round(monthly_expected_return * 100, 3)) + '%'
+    monthly_volatility_str = str(round(monthly_volatility * 100, 3)) + '%'
+    monthly_sharpe_ratio_str = str(round(monthly_sharpe_ratio, 3))
+
+    return monthly_return, monthly_expected_return_str, monthly_volatility_str, monthly_sharpe_ratio_str

@@ -22,7 +22,7 @@ import numpy as np
 import pandas_datareader as pdr
 
 # zhong yi's strategy
-def strategy(size, md):
+def strategy (size, md):
     df = pdr.DataReader('IVV', data_source='yahoo', start='2020-04-01')
     bond_10 = pdr.DataReader('^TNX',data_source='yahoo', start='2020-04-01')
     bond_30 = pdr.DataReader('^TYX',data_source='yahoo', start='2020-04-01')
@@ -30,8 +30,6 @@ def strategy(size, md):
     final = len(df)
     eia = pdr.DataReader('EIA.F',data_source='yahoo',start='2020-04-01')
     df['IVV'] = (df['Close'] - df['Open']) / df['Open']
-
-    '''这里不一定是30，应该跟随size变动'''
     df['mvg30'] = df['IVV'].rolling(window=size).mean()
     df['std30'] = df['IVV'].rolling(window=size).std()
     bond_10['bond10'] = (bond_10['Close'] - bond_10['Open']) / bond_10['Open']
