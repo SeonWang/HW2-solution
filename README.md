@@ -1,2 +1,2 @@
-# HW3: Strategy, and Backtesting
+# HW3: Strategy and Backtesting
 
